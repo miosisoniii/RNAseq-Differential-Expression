@@ -26,18 +26,13 @@ library(RColorBrewer)
 library(pheatmap)
 library(dplyr)
 
-setwd("~/projects/AGED/working/hisat_stringtie_ballgown/CGC_exp/DEanalysisR")
+setwd("~/DEanalysisR")
 data_directory = system.file('extdata', package='ballgown')
 
 #set phenotype data variables for each SRR* samples
-##FOR NORMAL V HCC
-#pheno_data <- read.csv("phenotable_normal_hcc.csv")
-
 ##FOR NORMAL V CIRRHOSIS
 pheno_data <- read.csv("phenotable_normal_cirr.csv")
 
-##FOR HCC V CIRRHOSIS
-#pheno_data <- read.csv("phenotable_hcc_cirr.csv")
 
 ```
 
@@ -51,12 +46,11 @@ v1
 v2 <- pheno_data[[1]]
 v2
 match(v1,v2)
-
 all(pheno_data$ids == list.files("Samples"))
 sample_ids <- v1
-
 bg <- ballgown(dataDir = "Samples", samplePatter= "SRR", pData=pheno_data)
 ```
+
 
 ###QC (Pre-filtration)
 ```{r}
@@ -174,12 +168,6 @@ colnames(test)[1] <- "id"
 match <- merge(result_table_gene, test, by="id")
 ```
 
-Write HCCvNormal FPKM to file
-```{r}
-write.csv(match, "test/hcc_normal_fpkm.csv")
-```
-
-
 ####Cirrhosis v Normal
 ```{r}
 #head(gexpr(bg)) -> testexpr
@@ -200,34 +188,8 @@ rownames(test) <- c()
 colnames(test)[1] <- "id"
 
 match <- merge(result_table_gene, test, by="id")
-match
+#match
 ```
-
-####Cirrhosis v HCC
-```{r}
-as.data.frame(geneexpr) -> geneexpression
-
-setNames(cbind(rownames(geneexpr),geneexpr, row.names=NULL), 
-         c("id",
-           "FPKM.SRR6880459",
-           "FPKM.SRR6880460",
-           "FPKM.SRR6880461",
-           "FPKM.SRR6880462",
-           "FPKM.SRR6880463",
-           "FPKM.SRR6880464",
-           "FPKM.SRR6880465",
-           "FPKM.SRR6880466")) -> test
-
-#remove rownames
-rownames(test) <- c()
-
-colnames(test)[1] <- "id"
-
-match <- merge(result_table_gene, test, by="id")
-head(match)
-```
-
-
 
 ###Adding Gene and Transcript Names
 ```{r}
@@ -375,37 +337,16 @@ transcript_mstrglist
 #Write to final files
 Files are sorted in ascending order by lowest Qvalue.
 ```{r}
-#NORMAL V HCC
-# write.csv(transcript_mstrg_filt,"test/transcript_HCCvNormal_mstrglist.csv")
-# write.csv(gene_mstrg_filt,"test/gene_HCCvNormal_mstrglist.csv")
-
 #CIRRHOSIS V NORMAL
 # write.csv(transcript_mstrg_filt,"test/transcript_CvNormal_mstrglist.csv")
 # write.csv(gene_mstrg_filt,"test/gene_CvNormal_mstrglist.csv")
-
-#CIRRHOSIS V HCC
-# write.csv(transcript_mstrg_filt,"test/transcript_CirrvHCC_mstrglist.csv")
-# write.csv(gene_mstrg_filt,"test/gene_CirrvHCC_mstrglist.csv")
-```
-
 
 #merge by gene name with FPKM
 ```{r}
 newtest <- merge(match, gene_mstrg_filt, by="gene_name")
 #remove last 5 duplicate columns
 newtest <- newtest[,-c(13:17)]
-write.csv(newtest, "test/hcc_normal_fpkm_genemerge.csv")
-
-
-```
-
-#Pull FPKM for genes from Cirrhosis v HCC
-```{r}
-newtest <- merge(match, gene_mstrg_filt, by="id")
-newtest %>% select(-feature.y, -fc.y, -pval.y, -qval.y) -> newtest
-newtest
-
-write.csv(newtest, "test/cirr_hcc_fpkm_genemerge.csv")
+#write.csv(newtest, "test/hcc_normal_fpkm_genemerge.csv")
 ```
 
 #Pull FPKM for genes from Cirrhosis v Normal
