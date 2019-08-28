@@ -1,0 +1,419 @@
+---
+title: 'Differential Expression Analysis: HCC v Normal, Cirrhosis v Normal, and Cirrhosis
+  v HCC'
+author: "Mio Sison"
+date: "8/8/2019"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+#the following code loads BiocManager utility to use Ballgown
+if (!requireNamespace("BiocManager", quietly=TRUE))
+  install.packages("BiocManager")
+BiocManager::install("ballgown")
+library(ballgown)
+library(genefilter)
+library(GenomicRanges)
+library(gplots)
+library(plyr)
+library(genefilter)
+library(ggplot2)
+library(devtools)
+library(ggfortify)
+library(RColorBrewer)
+library(pheatmap)
+library(dplyr)
+
+setwd("~/projects/AGED/working/hisat_stringtie_ballgown/CGC_exp/DEanalysisR")
+data_directory = system.file('extdata', package='ballgown')
+
+#set phenotype data variables for each SRR* samples
+##FOR NORMAL V HCC
+#pheno_data <- read.csv("phenotable_normal_hcc.csv")
+
+##FOR NORMAL V CIRRHOSIS
+pheno_data <- read.csv("phenotable_normal_cirr.csv")
+
+##FOR HCC V CIRRHOSIS
+#pheno_data <- read.csv("phenotable_hcc_cirr.csv")
+
+```
+
+#Filtering gene names from MSTRGs
+
+###Create Ballgown object
+```{r}
+##ONLY SAMPLES FOR ANALYSIS MUST BE IN DIRECTORY! ANY MORE AND IT WILL NOT WORK!
+list.files("Samples") -> v1
+v1
+v2 <- pheno_data[[1]]
+v2
+match(v1,v2)
+
+all(pheno_data$ids == list.files("Samples"))
+sample_ids <- v1
+
+bg <- ballgown(dataDir = "Samples", samplePatter= "SRR", pData=pheno_data)
+```
+
+###QC (Pre-filtration)
+```{r}
+number_of_genomic_features_and_samples = 
+  as.data.frame(c(length(sample_ids), 
+                  length(unique(indexes(bg)$t2g[,1])), 
+                  length(unique(indexes(bg)$t2g[,2]))))
+
+rownames(number_of_genomic_features_and_samples) = c("Number of samples", "Number of transcripts", "Number of genes")
+colnames(number_of_genomic_features_and_samples) = NULL
+print(number_of_genomic_features_and_samples)
+```
+
+###Set options for DE
+```{r}
+#options for analysis
+timecourse = FALSE
+adjustvars = NULL
+minimum_variance = 1
+df = 4
+log_transformation = TRUE
+getFC = TRUE #MUST BE CHANGED FOR MULTIPLE COMPARISONS
+covariate <- 'vital_status' #MUST BE CHANGED PER PHENOTYPE TABLE
+
+num_of_groups = length(unlist(unique(pheno_data[,covariate])))
+if (num_of_groups > 2 || timecourse == TRUE) {
+  getFC = FALSE
+}
+
+groups = pheno_data[,covariate]
+names(groups) = pheno_data[,1]
+names
+```
+
+###Filtration
+```{r}
+condition = paste("rowVars(texpr(bg)) >", minimum_variance)
+bg_filt = subset(bg,condition,genomesubset=TRUE)
+```
+
+###Post-Filtration
+```{r}
+number_of_genomic_features_and_samples = as.data.frame(c(length(unique(indexes(bg_filt)$t2g[,1])), length(unique(indexes(bg_filt)$t2g[,2]))))
+rownames(number_of_genomic_features_and_samples) = c("Number of transcripts", "Number of genes")
+colnames(number_of_genomic_features_and_samples) = NULL
+print(number_of_genomic_features_and_samples)
+```
+
+###Gene and Transript FPKM abundance
+```{r}
+# transcripts
+transcript_fpkm_all = as.data.frame(log(texpr(bg, meas = "FPKM") + 1))
+names(transcript_fpkm_all) = gsub("FPKM.","", names(transcript_fpkm_all))
+transcript_fpkm_all = stack(transcript_fpkm_all)
+
+# adding group to transcript_fpkm
+transcript_fpkm_all$group = groups[transcript_fpkm_all$ind]
+transcript_fpkm_all = arrange(transcript_fpkm_all, group)
+transcript_fpkm_all$ind = factor(transcript_fpkm_all$ind, levels = unique(transcript_fpkm_all$ind))
+
+#genes
+gene_fpkm_all = as.data.frame(log(gexpr(bg) + 1))
+names(gene_fpkm_all) = gsub("FPKM.","", names(gene_fpkm_all))
+gene_fpkm_all = stack(gene_fpkm_all)
+
+# adding group to gene_fpkm
+gene_fpkm_all$group = groups[gene_fpkm_all$ind]
+gene_fpkm_all = arrange(gene_fpkm_all, group)
+gene_fpkm_all$ind = factor(gene_fpkm_all$ind, levels = unique(gene_fpkm_all$ind))
+```
+
+
+###Getting Result Table
+```{r}
+result_table_transcript = stattest(gown=bg_filt, feature="transcript", meas="FPKM", timecourse=timecourse, covariate=covariate, adjustvars=adjustvars, df=df, getFC=getFC, log=log_transformation)
+
+
+result_table_gene = stattest(gown=bg_filt, feature="gene", meas="FPKM", timecourse=timecourse, covariate=covariate, adjustvars=adjustvars, df=df, getFC=getFC, log=log_transformation)
+
+
+result_table_transcript = data.frame(gene_id=geneIDs(bg_filt), result_table_transcript)
+head(result_table_transcript)
+```
+
+#TEST
+Viewing FPKM
+```{r}
+head(result_table_gene)
+```
+##TEST MATCHING FPKM BY CHS 
+```{r}
+geneexpr <- gexpr(bg)
+```
+
+####HCC v Normal
+```{r}
+
+#head(gexpr(bg)) -> testexpr
+as.data.frame(geneexpr) ->geneexpression
+
+setNames(cbind(rownames(geneexpr),geneexpr, row.names=NULL), 
+         c("id",
+           "FPKM.SRR6880457",
+           "FPKM.SRR6880458",
+           "FPKM.SRR6880460",
+           "FPKM.SRR6880462",
+           "FPKM.SRR6880464",
+           "FPKM.SRR6880466")) -> test
+
+#remove rownames
+rownames(test) <- c()
+
+colnames(test)[1] <- "id"
+
+match <- merge(result_table_gene, test, by="id")
+```
+
+Write HCCvNormal FPKM to file
+```{r}
+write.csv(match, "test/hcc_normal_fpkm.csv")
+```
+
+
+####Cirrhosis v Normal
+```{r}
+#head(gexpr(bg)) -> testexpr
+as.data.frame(geneexpr) ->geneexpression
+
+setNames(cbind(rownames(geneexpr),geneexpr, row.names=NULL), 
+         c("id",
+           "FPKM.SRR6880457",
+           "FPKM.SRR6880458",
+           "FPKM.SRR6880459",
+           "FPKM.SRR6880461",
+           "FPKM.SRR6880463",
+           "FPKM.SRR6880465")) -> test
+
+#remove rownames
+rownames(test) <- c()
+
+colnames(test)[1] <- "id"
+
+match <- merge(result_table_gene, test, by="id")
+match
+```
+
+####Cirrhosis v HCC
+```{r}
+as.data.frame(geneexpr) -> geneexpression
+
+setNames(cbind(rownames(geneexpr),geneexpr, row.names=NULL), 
+         c("id",
+           "FPKM.SRR6880459",
+           "FPKM.SRR6880460",
+           "FPKM.SRR6880461",
+           "FPKM.SRR6880462",
+           "FPKM.SRR6880463",
+           "FPKM.SRR6880464",
+           "FPKM.SRR6880465",
+           "FPKM.SRR6880466")) -> test
+
+#remove rownames
+rownames(test) <- c()
+
+colnames(test)[1] <- "id"
+
+match <- merge(result_table_gene, test, by="id")
+head(match)
+```
+
+
+
+###Adding Gene and Transcript Names
+```{r}
+# adding gene ids to result_table_transcript
+result_table_transcript = data.frame(gene_id=geneIDs(bg_filt), result_table_transcript)
+
+
+# adding transcript names to result_table_transcript
+result_table_transcript$t_name = texpr(bg_filt, "all")[,"t_name"]
+
+
+# matching gene id to corresponding gene name
+gene_id_name_matching = c()
+gene_id_multiple_names = c()
+
+gene_ids_names = texpr(bg_filt, "all")[,c("gene_id","gene_name")]
+for (i in 1:nrow(gene_ids_names)){
+  gene_id = gene_ids_names[i,1]
+  gene_name = gene_ids_names[i,2]
+  names(gene_id) = gene_name
+  
+  # if gene id correspond to two different names skip processing
+  if (gene_id %in% gene_id_multiple_names) {
+    next
+  }
+  
+  # if gene id is already in matching vector 
+  if (gene_id %in% gene_id_name_matching) {
+    index = match(gene_id, gene_id_name_matching)
+    # if gene id that is already in matching vector has two different gene names
+    if (gene_name != "." && gene_name != names(gene_id_name_matching[index])){
+      gene_id_multiple_names = c(gene_id_multiple_names, gene_id)
+      gene_id_name_matching = gene_id_name_matching[gene_id_name_matching != gene_id]
+    }
+    next
+  }
+  
+  # if gene id is not in either of two vectors
+  if (gene_name != ".") {
+    gene_id_name_matching = c(gene_id_name_matching, gene_id)
+    next
+  }
+}
+
+
+# setting missing gene names in result_table_gene
+gene_names_gene_table = c()
+for (i in 1:nrow(result_table_gene)) {
+  gene_id = result_table_gene[i, "id"]
+  if (gene_id %in% gene_id_name_matching){
+    index = match(gene_id, gene_id_name_matching)
+    gene_names_gene_table = c(gene_names_gene_table, names(gene_id_name_matching[index]))
+    next
+  }
+  gene_names_gene_table = c(gene_names_gene_table, toString(gene_id))
+}
+
+result_table_gene$gene_name = gene_names_gene_table
+
+
+# setting missing gene names in result_table_transcript
+gene_names_transcript_table = c()
+for (i in 1:nrow(result_table_transcript)) {
+  gene_id = result_table_transcript[i, "gene_id"]
+  if (gene_id %in% gene_id_name_matching){
+    index = match(gene_id, gene_id_name_matching)
+    gene_names_transcript_table = c(gene_names_transcript_table, names(gene_id_name_matching[index]))
+    next
+  }
+  gene_names_transcript_table = c(gene_names_transcript_table, toString(gene_id))
+}
+
+result_table_transcript$gene_name = gene_names_transcript_table
+
+head(gene_names_transcript_table)
+```
+
+###Write FPKM Data to Files
+```{r}
+#HCC V NORMAL
+# file_name = "test/Ballgown.NvHCC.transcripts.FPKM.txt"
+# write.table(result_table_transcript, file = file_name, quote =FALSE, sep = "\t", row.names = FALSE, col.names = TRUE)
+# 
+# file_name = "test/Ballgown.NvHCC.genes.FPKM.txt"
+# write.table(result_table_gene, file = file_name, quote =FALSE, sep = "\t", row.names = FALSE, col.names = TRUE)
+
+
+#NORMAL V CIRRHOSIS
+# file_name = "test/Ballgown.NvCirr.transcripts.FPKM.txt"
+# write.table(result_table_transcript, file = file_name, quote =FALSE, sep = "\t", row.names = FALSE, col.names = TRUE)
+# 
+# file_name = "test/Ballgown.NvCirr.genes.FPKM.txt"
+# write.table(result_table_gene, file = file_name, quote =FALSE, sep = "\t", row.names = FALSE, col.names = TRUE)
+
+#Cirrhosis v HCC
+file_name = "test/Ballgown.CirrvHCC.transcripts.FPKM.txt"
+write.table(result_table_transcript, file = file_name, quote =FALSE, sep = "\t", row.names = FALSE, col.names = TRUE)
+
+file_name = "test/Ballgown.CirrvHCC.genes.FPKM.txt"
+write.table(result_table_gene, file = file_name, quote =FALSE, sep = "\t", row.names = FALSE, col.names = TRUE)
+```
+
+##Sort MSTRG from Genes by Q-value
+Show only 100 lowest Q-values from Transcript list
+```{r}
+#filter MSTRG by q-value for transcript, top 100 lowest q-values
+head(result_table_transcript[order(result_table_transcript$qval),], n =100) -> transcript_with_mstrg
+head(transcript_with_mstrg)
+```
+
+##Filter MSTRG from Transcripts
+Use *!grepl* to remove MSTRG from **filtered** transcript list.
+```{r}
+#this code filters the top 100 transcripts for only_gene_names
+filter(transcript_with_mstrg, !grepl("MSTRG", transcript_with_mstrg$gene_name)) -> transcript_mstrg_filt
+transcript_mstrg_filt
+```
+
+##Sort MSTRG from Genes by Q-value
+Show only 100 lowest Q-values from Gene list
+```{r}
+head(result_table_gene[order(result_table_gene$qval),], n =100) -> gene_with_mstrg
+head(gene_with_mstrg)
+```
+
+##Filter MSTRG from Genes
+Use *!grepl* to remove MSTRG from **filtered** gene list.
+```{r}
+filter(gene_with_mstrg, !grepl("MSTRG", gene_with_mstrg$gene_name)) -> gene_mstrg_filt
+gene_mstrg_filt
+```
+
+#Top Genes from MSTRGs
+Filter for the top genes. The pvalue and q value can used to filter further.
+```{r}
+gene_mstrg_filt %>% select(-pval, -qval, -fc) -> gene_mstrglist
+gene_mstrglist
+```
+
+```{r}
+transcript_mstrg_filt %>% select(-id, -gene_id.1, -pval, -qval, -fc) -> transcript_mstrglist
+transcript_mstrglist
+```
+
+#Write to final files
+Files are sorted in ascending order by lowest Qvalue.
+```{r}
+#NORMAL V HCC
+# write.csv(transcript_mstrg_filt,"test/transcript_HCCvNormal_mstrglist.csv")
+# write.csv(gene_mstrg_filt,"test/gene_HCCvNormal_mstrglist.csv")
+
+#CIRRHOSIS V NORMAL
+# write.csv(transcript_mstrg_filt,"test/transcript_CvNormal_mstrglist.csv")
+# write.csv(gene_mstrg_filt,"test/gene_CvNormal_mstrglist.csv")
+
+#CIRRHOSIS V HCC
+# write.csv(transcript_mstrg_filt,"test/transcript_CirrvHCC_mstrglist.csv")
+# write.csv(gene_mstrg_filt,"test/gene_CirrvHCC_mstrglist.csv")
+```
+
+
+#merge by gene name with FPKM
+```{r}
+newtest <- merge(match, gene_mstrg_filt, by="gene_name")
+#remove last 5 duplicate columns
+newtest <- newtest[,-c(13:17)]
+write.csv(newtest, "test/hcc_normal_fpkm_genemerge.csv")
+
+
+```
+
+#Pull FPKM for genes from Cirrhosis v HCC
+```{r}
+newtest <- merge(match, gene_mstrg_filt, by="id")
+newtest %>% select(-feature.y, -fc.y, -pval.y, -qval.y) -> newtest
+newtest
+
+write.csv(newtest, "test/cirr_hcc_fpkm_genemerge.csv")
+```
+
+#Pull FPKM for genes from Cirrhosis v Normal
+```{r}
+newtest <- merge(match, gene_mstrg_filt, by="id")
+newtest %>% select(-feature.y, -fc.y, -pval.y, -qval.y) -> newtest
+newtest
+
+write.csv(newtest, "test/cirr_normal_fpkm_genemerge.csv")
+```
+
