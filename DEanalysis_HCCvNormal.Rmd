@@ -341,14 +341,6 @@ Files are sorted in ascending order by lowest Qvalue.
 # write.csv(transcript_mstrg_filt,"test/transcript_CvNormal_mstrglist.csv")
 # write.csv(gene_mstrg_filt,"test/gene_CvNormal_mstrglist.csv")
 
-#merge by gene name with FPKM
-```{r}
-newtest <- merge(match, gene_mstrg_filt, by="gene_name")
-#remove last 5 duplicate columns
-newtest <- newtest[,-c(13:17)]
-#write.csv(newtest, "test/hcc_normal_fpkm_genemerge.csv")
-```
-
 #Pull FPKM for genes from Cirrhosis v Normal
 ```{r}
 newtest <- merge(match, gene_mstrg_filt, by="id")
