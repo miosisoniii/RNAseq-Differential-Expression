@@ -1,2 +1,2 @@
 # RNAseq-Differential-Expression
-Differential expression analysis of RNAseq Hepatocellular Carcinoma (HCC) patient data
+Differential expression analysis of RNAseq Hepatocellular Carcinoma (HCC) patient data using **Ballgown**.
